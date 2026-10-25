@@ -18,11 +18,13 @@
       <span class="list__icon" style="--c:${esc(cat.color)}" aria-hidden="true">${esc(cat.icon || '•')}</span>
       <div class="list__main">
         <div class="list__title">${esc(o.bill.name)}</div>
-        <div class="list__meta">${showDate ? `<span>${U.fmtDate(o.date, 'medium')} · ${U.relDay(o.date)}</span>` : ''}${ui.badge(o.status, auto ? 'Auto-paid' : null)}${ui.chip(o.bill.accountId, 'account')}</div>
+        <div class="list__meta">${showDate ? `<span>${U.fmtDate(o.date, 'medium')} · ${U.relDay(o.date)}</span>` : ''}${ui.badge(o.status, o.payment && o.payment.tracked ? 'Done' : auto ? 'Auto-paid' : null)}${ui.chip(o.bill.accountId, 'account')}</div>
+        ${o.envelope && o.status === 'tracking' ? `<div class="list__meta"><span>Spent <strong>${U.money(o.envelope.spent)}</strong> of ${U.money(o.envelope.allocated)} · <span class="${o.envelope.remaining >= 0 ? 'pos' : 'neg'}">${o.envelope.remaining >= 0 ? U.money(o.envelope.remaining) + ' left' : U.money(-o.envelope.remaining) + ' over'}</span></span></div>` : ''}
       </div>
       <div class="list__amount">${o.estimated ? '≈ ' : ''}${U.money(o.amount)}</div>
       <div class="list__actions compact-mobile">
-        ${o.payment && !auto ? `<button class="btn btn--ghost btn--sm" data-paid="${o.bill.id}|${o.date}">Edit</button>`
+        ${o.bill.trackSpending && !(o.payment && !o.payment.tracked && !auto) ? (o.date <= U.today() && o.envelope && !o.envelope.done ? `<button class="btn btn--ghost btn--sm" data-spend="${o.bill.id}" aria-label="Add spending to ${esc(o.bill.name)}">＋ Spend</button>` : '')
+        : o.payment && !auto ? `<button class="btn btn--ghost btn--sm" data-paid="${o.bill.id}|${o.date}">Edit</button>`
           : o.payment ? '' : `<button class="btn btn--ghost btn--sm" data-quickpaid="${o.bill.id}|${o.date}" aria-label="Mark ${esc(o.bill.name)} paid">✓ Paid</button>`}
       </div>
     </li>`;
@@ -185,10 +187,11 @@
         </div>`;
 
       main.onclick = (e) => {
-        const t = e.target.closest('[data-period],[data-act],[data-quickpaid],[data-paid],[data-received]');
+        const t = e.target.closest('[data-period],[data-act],[data-quickpaid],[data-paid],[data-received],[data-spend]');
         if (!t) return;
         if (t.dataset.period) return S.updateSettings({ dashboardPeriod: t.dataset.period });
         if (t.dataset.quickpaid) { const [id, d] = t.dataset.quickpaid.split('|'); return B.forms.quickPaid(id, d); }
+        if (t.dataset.spend) return B.forms.transaction(null, { billId: t.dataset.spend });
         if (t.dataset.received) { const [id, d] = t.dataset.received.split('|'); return B.forms.markReceived(id, d); }
         if (t.dataset.paid) { const [id, d] = t.dataset.paid.split('|'); return B.forms.markPaid(id, d); }
         ({

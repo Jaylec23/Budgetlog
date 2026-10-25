@@ -74,11 +74,12 @@ Point every app (Budgetlog, Plate Log, future trackers) at the **same** Supabase
   accounts:     [{ id, name, type, color, notes }],
   categories:   [{ id, name, icon, color, budget }],
   bills:        [{ id, name, amount, amountType: 'fixed'|'variable', frequency, customEvery, customUnit,
-                   startDate, endDate, categoryId, accountId, autopay, paused, notes }],
+                   startDate, endDate, categoryId, accountId, autopay, trackSpending, paused, notes }],
   income:       [{ id, name, amount, amountType: 'fixed'|'variable', frequency, customEvery, customUnit, startDate, endDate, accountId, paused, notes }],
   payments:     [{ id, billId, dueDate, amount, paidOn, note }],
   receipts:     [{ id, incomeId, date, amount, note }],   // real amounts for 'variable' income
-  transactions: [{ id, type: 'expense'|'income', date, description, amount, categoryId, accountId, notes }],
+  transactions: [{ id, type: 'expense'|'income', date, description, amount, categoryId, accountId, billId, notes }],
+                   // billId links spending to a bill with trackSpending (counts against its allowance)
   goals:        [{ id, name, icon, color, target, startAmount, targetDate, accountId, contributions: [{ id, date, amount, note }] }]
 }
 ```

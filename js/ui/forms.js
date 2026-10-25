@@ -76,12 +76,15 @@ window.Budget = window.Budget || {};
           { name: 'categoryId', label: 'Category', type: 'select', placeholder: 'No category', options: ui.categoryOptions },
           { name: 'accountId', label: 'Paid from account', type: 'select', placeholder: 'No account', options: ui.accountOptions }
         ] },
-        { name: 'autopay', label: 'Paid automatically (direct debit) — mark it paid for me on the due date', type: 'checkbox' },
+        { name: 'trackSpending', label: 'Track it with my spending — I’ll log what I actually spend (e.g. groceries, fuel) and see it against this amount', type: 'checkbox',
+          help: 'The amount above becomes your allowance for each period. Spending you link to this bill is counted here instead of as extra spending.' },
+        { name: 'autopay', label: 'Paid automatically (direct debit) — mark it paid for me on the due date', type: 'checkbox', when: (v) => !v.trackSpending },
         { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Account number, reference, reminders…' }
       ],
       extra: bill ? { label: 'Delete', danger: true, onClick: () => F.deleteBill(bill.id) } : null,
       onSubmit: (v) => {
         clean(v);
+        if (v.trackSpending) v.autopay = false;
         const saved = S.upsert('bills', Object.assign(bill ? { id: bill.id } : {}, v));
         ui.toast(bill ? 'Bill updated' : `${saved.name} added`);
       }
@@ -173,6 +176,26 @@ window.Budget = window.Budget || {};
   };
 
   /* ---------- Spending / one-off transaction ---------- */
+  // tracked bills first, then other "estimate" bills, then the rest
+  const billOptions = () => {
+    const bills = S.list('bills').filter((b) => !b.paused);
+    const rank = (b) => (b.trackSpending ? 0 : b.amountType === 'variable' ? 1 : 2);
+    return bills.slice().sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+      .map((b) => ({ value: b.id, label: `${b.name}${b.trackSpending ? '' : b.amountType === 'variable' ? ' (estimate)' : ''}` }));
+  };
+  const v0Cat = () => 'No category';
+  function billPreview(v, existing) {
+    const bill = S.get('bills', v.billId);
+    if (!bill || !U.isISO(v.date)) return '';
+    const env = B.calc.currentEnvelope(bill, v.date) || B.calc.envelope(bill, v.date);
+    const already = env.spent - (existing && existing.billId === bill.id && existing.date >= env.start && existing.date <= env.end ? Number(existing.amount) || 0 : 0);
+    const after = already + (Number(v.amount) || 0);
+    const left = env.allocated - after;
+    return `<div class="preview__title">${U.esc(bill.name)} · ${U.fmtDate(env.start, 'short')} – ${U.fmtDate(env.end, 'short')}</div>
+      <p class="small" style="margin:0">Allowance ${U.money(env.allocated)} · spent so far ${U.money(already)}</p>
+      <p class="small" style="margin:4px 0 0">After this: <strong class="${left >= 0 ? 'pos' : 'neg'}">${left >= 0 ? U.money(left) + ' left' : U.money(-left) + ' over'}</strong></p>`;
+  }
+
   F.transaction = (id, preset = {}) => {
     const t = id ? S.get('transactions', id) : null;
     const values = t || Object.assign({ type: 'expense', date: U.today() }, preset);
@@ -188,12 +211,31 @@ window.Budget = window.Budget || {};
           { name: 'amount', label: 'Amount', type: 'money', required: true, min: 0 },
           { name: 'date', label: 'Date', type: 'date', required: true }
         ] },
-        { name: 'categoryId', label: 'Category', type: 'select', placeholder: 'No category', options: ui.categoryOptions, when: (v) => v.type !== 'income' },
-        { name: 'accountId', label: 'Account', type: 'select', placeholder: 'No account', options: ui.accountOptions },
+        { name: 'billId', label: 'Counts towards a bill', type: 'select', placeholder: 'No — just everyday spending', options: billOptions,
+          when: (v) => v.type !== 'income' && S.list('bills').length > 0,
+          help: 'Link things like groceries or fuel to their bill to see what you’ve spent against what you set aside.' },
+        { name: 'billNow', type: 'preview', when: (v) => v.type !== 'income' && v.billId, compute: (v) => billPreview(v, t) },
+        { name: 'categoryId', label: 'Category', type: 'select', placeholder: v0Cat(values), options: ui.categoryOptions, when: (v) => v.type !== 'income' && !v.billId },
+        { name: 'accountId', label: 'Account', type: 'select', placeholder: 'No account', options: ui.accountOptions, when: (v) => !v.billId },
         { name: 'notes', label: 'Notes', type: 'textarea' }
       ],
       extra: t ? { label: 'Delete', danger: true, onClick: () => ui.undoToast('Entry deleted', S.remove('transactions', t.id)) } : null,
-      onSubmit: (v) => { if (v.type === 'income') v.categoryId = ''; S.upsert('transactions', Object.assign(t ? { id: t.id } : {}, v)); ui.toast(t ? 'Saved' : 'Added'); }
+      onSubmit: (v) => {
+        delete v.billNow;
+        if (v.type === 'income') { v.categoryId = ''; v.billId = ''; }
+        const bill = v.billId ? S.get('bills', v.billId) : null;
+        if (bill) {
+          // linked spending takes the bill's category & account
+          v.categoryId = bill.categoryId || '';
+          v.accountId = bill.accountId || '';
+          if (!bill.trackSpending) S.upsert('bills', { id: bill.id, trackSpending: true, autopay: false });
+        }
+        S.upsert('transactions', Object.assign(t ? { id: t.id } : {}, v));
+        if (bill) {
+          const env = B.calc.currentEnvelope(S.get('bills', bill.id), v.date) || B.calc.envelope(S.get('bills', bill.id), v.date);
+          ui.toast(env.remaining >= 0 ? `${bill.name}: ${U.money(env.remaining)} left` : `${bill.name}: ${U.money(-env.remaining)} over`);
+        } else ui.toast(t ? 'Saved' : 'Added');
+      }
     });
   };
 

@@ -273,7 +273,7 @@ window.Budget = window.Budget || {};
         { name: 'Car registration', amount: 890, frequency: 'yearly', startDate: U.addMonths(t, 2), categoryId: cat('Transport'), accountId: acc('Savings') },
         { name: 'Streaming', amount: 18.99, frequency: 'monthly', startDate: monthDay(9), categoryId: cat('Subscriptions'), accountId: acc('Everyday'), autopay: true },
         { name: 'Gym membership', amount: 32, frequency: 'fortnightly', startDate: lastWeekday, categoryId: cat('Health'), accountId: acc('Everyday'), autopay: true },
-        { name: 'Groceries', amount: 180, amountType: 'variable', frequency: 'weekly', startDate: U.addDays(U.startOfWeek(t, 1), -14 + 5), categoryId: cat('Groceries'), accountId: acc('Everyday') }
+        { name: 'Groceries', amount: 180, amountType: 'variable', trackSpending: true, frequency: 'weekly', startDate: U.addDays(U.startOfWeek(t, 1), -14 + 5), categoryId: cat('Groceries'), accountId: acc('Everyday') }
       ];
       bills.forEach((b) => this.upsert('bills', Object.assign({ amountType: 'fixed', notes: '', sample: true }, b)));
 
@@ -294,6 +294,7 @@ window.Budget = window.Budget || {};
       d.bills.filter((b) => b.sample).forEach((b) => {
         B.recur.occurrences(b, from, U.addDays(t, -1)).forEach((date, i) => {
           if (b.name === 'Internet' && date > U.addDays(t, -10)) return; // leave one overdue to show the feature
+          if (b.trackSpending && date > U.addDays(t, -7)) return; // current week is tracked by spending entries
           const amt = b.amountType === 'variable' ? b.amount * (0.85 + ((i * 7) % 30) / 100) : b.amount;
           d.payments.push({ id: U.uid(), billId: b.id, dueDate: date, amount: U.round2(amt), paidOn: date });
         });
@@ -306,6 +307,15 @@ window.Budget = window.Budget || {};
       ].forEach(([off, description, amount, c]) =>
         this.upsert('transactions', { type: 'expense', date: U.addDays(t, off), description, amount, categoryId: cat(c), accountId: acc('Everyday'), notes: '', sample: true }));
 
+      // spending logged against the tracked Groceries bill
+      const gro0 = d.bills.find((b) => b.sample && b.trackSpending);
+      if (gro0) {
+        const cycleStart = B.recur.occurrences(gro0, U.addDays(t, -6), t).pop() || t;
+        [[0, 'Supermarket shop', 96.4], [2, 'Fruit & veg market', 31.75]].forEach(([off, description, amount]) => {
+          const date = U.min(U.addDays(cycleStart, off), t);
+          this.upsert('transactions', { type: 'expense', date, description, amount, billId: gro0.id, categoryId: gro0.categoryId, accountId: gro0.accountId, notes: '', sample: true });
+        });
+      }
       const fun = d.categories.find((c) => c.name === 'Fun & eating out'); if (fun) fun.budget = 200;
       const gro = d.categories.find((c) => c.name === 'Groceries'); if (gro) gro.budget = 800;
 

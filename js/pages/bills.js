@@ -21,22 +21,26 @@
     const next = R.next(b, 1)[0];
     const occ = next ? { date: next, payment: S.paymentFor(b.id, next) } : null;
     const status = occ ? C.status(occ.date, occ.payment) : null;
+    const env = b.trackSpending && !b.paused ? C.currentEnvelope(b) : null;
     const pay = S.data.settings.payFrequency;
     const per = R.PERIODS.find((p) => p.id === pay);
     return `<li class="list__item${b.paused ? ' is-paused' : ''}">
       <span class="list__icon" style="--c:${esc(cat.color)}" aria-hidden="true">${esc(cat.icon || '•')}</span>
       <div class="list__main">
-        <div class="list__title">${esc(b.name)} ${b.autopay ? '<span class="badge badge--info">Auto</span>' : ''} ${b.paused ? '<span class="badge badge--muted">Paused</span>' : ''}</div>
+        <div class="list__title">${esc(b.name)} ${b.autopay ? '<span class="badge badge--info">Auto</span>' : ''} ${b.trackSpending ? '<span class="badge badge--tracking">Tracked</span>' : ''} ${b.paused ? '<span class="badge badge--muted">Paused</span>' : ''}</div>
         <div class="list__meta">
           <span>${esc(R.describe(b))}</span>
           ${ui.chip(b.accountId, 'account')}
         </div>
-        <div class="list__meta">${next ? `Next: <strong>${U.fmtDate(next, 'medium')}</strong> (${U.relDay(next)}) ${ui.badge(status)}` : b.paused ? 'Paused' : 'No more due dates'}</div>
+        ${env ? `<div class="list__meta">This period: spent <strong>${U.money(env.spent)}</strong> of ${U.money(env.allocated)} · <span class="${env.remaining >= 0 ? 'pos' : 'neg'}">${env.remaining >= 0 ? U.money(env.remaining) + ' left' : U.money(-env.remaining) + ' over'}</span></div>
+          ${ui.progress(env.pct, { color: cat.color, label: `${b.name}: ${env.pct}% of allowance spent` })}`
+          : `<div class="list__meta">${next ? `Next: <strong>${U.fmtDate(next, 'medium')}</strong> (${U.relDay(next)}) ${ui.badge(status)}` : b.paused ? 'Paused' : 'No more due dates'}</div>`}
       </div>
       <div class="list__amount">${b.amountType === 'variable' ? '≈ ' : ''}${U.money(b.amount)}
         ${b.frequency !== 'once' ? `<small>${U.money(R.amountPer(b, pay))} ${esc(per.label)}</small>` : '<small>one-off</small>'}</div>
       <div class="list__actions">
-        ${next && !occ.payment && !b.paused ? `<button class="btn btn--ghost btn--sm" data-quickpaid="${b.id}|${next}" aria-label="Mark next ${esc(b.name)} paid">✓ Paid</button>` : ''}
+        ${b.trackSpending && !b.paused ? `<button class="btn btn--ghost btn--sm" data-spend="${b.id}" aria-label="Add spending to ${esc(b.name)}">＋ Spend</button>`
+          : next && !occ.payment && !b.paused ? `<button class="btn btn--ghost btn--sm" data-quickpaid="${b.id}|${next}" aria-label="Mark next ${esc(b.name)} paid">✓ Paid</button>` : ''}
         <button class="icon-btn" data-edit="${b.id}" aria-label="Edit ${esc(b.name)}" title="Edit">✎</button>
         <button class="icon-btn" data-dup="${b.id}" aria-label="Duplicate ${esc(b.name)}" title="Duplicate">⧉</button>
         <button class="icon-btn" data-pause="${b.id}" aria-label="${b.paused ? 'Resume' : 'Pause'} ${esc(b.name)}" title="${b.paused ? 'Resume' : 'Pause'}">${b.paused ? '▶' : '⏸'}</button>
@@ -174,6 +178,7 @@
         if (d.dup) { const c = S.duplicate('bills', d.dup); ui.toast('Copy made — edit it to change the details'); return B.forms.bill(c.id); }
         if (d.pause) { const b = S.get('bills', d.pause); S.upsert('bills', { id: b.id, paused: !b.paused }); return ui.toast(b.paused ? `${b.name} resumed` : `${b.name} paused — it won’t count in totals`); }
         if (d.del) return B.forms.deleteBill(d.del);
+        if (d.spend) return B.forms.transaction(null, { billId: d.spend });
         if (d.quickpaid) { const [id, dt] = d.quickpaid.split('|'); return B.forms.quickPaid(id, dt); }
         if (d.paid) { const [id, dt] = d.paid.split('|'); return B.forms.markPaid(id, dt); }
       };

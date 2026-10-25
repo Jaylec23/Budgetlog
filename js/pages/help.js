@@ -14,6 +14,8 @@
       'When adding it, choose <em>“An estimate”</em>. We’ll use your estimate for planning (shown with ≈) and ask for the real amount when you mark it paid. Paid history then shows how much it changed.'],
     ['My pay is different every time.',
       'When adding your income, choose <em>“An estimate”</em> and enter your usual or average pay. We plan with it (shown with ≈). Once each pay day arrives, Home and the Income page ask what actually came in, and your totals update to the real amount.'],
+    ['How do I see what I’ve spent on groceries (or fuel) against what I set aside?',
+      'Add groceries as a bill with the amount you allow each week (or fortnight, or month), and tick <em>“Track it with my spending”</em>. Then, whenever you add spending, choose <em>Groceries</em> under <em>“Counts towards a bill”</em>. The Spending page shows how much is left for the current week, grouped by account so you can compare it with what you moved into each account. Linked spending is counted once, inside the bill, not again as extra spending.'],
     ['What does “Paid automatically” do?',
       'For direct debits, tick it and the bill counts as paid on its due date without you doing anything. You can still edit the amount if it was different.'],
     ['What is “Set aside each pay”?',

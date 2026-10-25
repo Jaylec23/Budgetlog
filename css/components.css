@@ -102,6 +102,11 @@
 .badge--due-soon { background: var(--warn-soft); color: var(--warn); }
 .badge--due-soon::before { content: "◷"; }
 .badge--upcoming { background: var(--surface-2); color: var(--muted); }
+.badge--tracking { background: var(--info-soft); color: var(--info); }
+.badge--tracking::before { content: "◔"; }
+.badge--link { background: var(--info-soft); color: var(--info); }
+.envelope__nums { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: .9rem; margin: 6px 0; }
+.envelope__left { font-weight: 800; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 .badge--info { background: var(--info-soft); color: var(--info); }
 .badge--muted { background: var(--surface-2); color: var(--muted); }
 

@@ -114,6 +114,7 @@
         }
         if (d.add === 'bill') return B.forms.bill(null, { startDate: state.selected });
         if (d.add === 'spend') return B.forms.transaction(null, { date: state.selected });
+        if (d.spend) return B.forms.transaction(null, { billId: d.spend, date: state.selected <= U.today() ? state.selected : U.today() });
         if (d.received) { const [id, dt] = d.received.split('|'); return B.forms.markReceived(id, dt); }
         if (d.editTx) return B.forms.transaction(d.editTx);
         if (d.quickpaid) { const [id, dt] = d.quickpaid.split('|'); return B.forms.quickPaid(id, dt); }

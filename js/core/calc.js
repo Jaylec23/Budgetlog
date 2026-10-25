@@ -20,7 +20,44 @@ window.Budget = window.Budget || {};
     if (U.daysBetween(today, date) <= soon) return 'due-soon';
     return 'upcoming';
   };
-  C.STATUS_LABEL = { paid: 'Paid', overdue: 'Overdue', 'due-soon': 'Due soon', upcoming: 'Upcoming' };
+  C.STATUS_LABEL = { paid: 'Paid', overdue: 'Overdue', 'due-soon': 'Due soon', upcoming: 'Upcoming', tracking: 'In progress' };
+
+  /* ---------- bills tracked with spending (e.g. groceries, fuel) ----------
+     Each due date starts a "cycle" that runs until the day before the next
+     one. Spending linked to the bill inside that cycle is what was spent
+     against the bill's amount (the allocation). */
+  C.cycleEnd = (bill, date) => {
+    const next = R.next(bill, 1, U.addDays(date, 1))[0];
+    if (next) return U.addDays(next, -1);
+    if (bill.endDate && bill.endDate > date) return bill.endDate;
+    return U.addDays(date, Math.max(6, Math.round(365.25 / Math.max(R.perYear(bill), 1)) - 1));
+  };
+  C.linkedSpending = (billId, from, to) =>
+    S().list('transactions').filter((t) => t.billId === billId && (t.type || 'expense') === 'expense' && t.date >= from && t.date <= to);
+
+  /** Allocation vs spending for one cycle of a tracked bill. */
+  C.envelope = (bill, date) => {
+    const end = C.cycleEnd(bill, date);
+    const entries = C.linkedSpending(bill.id, date, end);
+    const spent = U.sum(entries, (t) => t.amount);
+    const allocated = Number(bill.amount) || 0;
+    return { bill, start: date, end, entries, spent, allocated, remaining: allocated - spent, pct: U.pct(spent, allocated), done: end < U.today() };
+  };
+
+  /** The cycle of a tracked bill that contains `day` (default today), or null. */
+  C.currentEnvelope = (bill, day = U.today()) => {
+    const start = R.occurrences(bill, U.addDays(day, -800), day).pop();
+    if (!start) return null;
+    const env = C.envelope(bill, start);
+    return env.end >= day ? env : null;
+  };
+
+  /** True when a spending entry is already counted inside a tracked bill. */
+  C.countedInBill = (t) => {
+    if (!t.billId) return false;
+    const b = S().get('bills', t.billId);
+    return !!(b && b.trackSpending && !b.paused && t.date >= b.startDate);
+  };
 
   /** Every bill due date in range, with paid info and the amount to count. */
   C.billOccurrences = (from, to, filter = () => true) => {
@@ -28,14 +65,22 @@ window.Budget = window.Budget || {};
     S().list('bills').filter(filter).forEach((bill) => {
       R.occurrences(bill, from, to).forEach((date) => {
         // Saved payment wins; otherwise auto-pay bills count as paid once their date arrives.
-        const payment = S().paymentFor(bill.id, date) ||
+        let payment = S().paymentFor(bill.id, date) ||
           (bill.autopay && date <= U.today() ? { auto: true, amount: bill.amount, paidOn: date } : null);
+        let env = null;
+        if (bill.trackSpending && !payment) {
+          env = C.envelope(bill, date);
+          // a finished cycle counts as paid with what was actually spent
+          if (env.done) payment = { auto: true, tracked: true, amount: env.spent, paidOn: env.end };
+        }
+        const live = env && !env.done;
         out.push({
-          kind: 'bill', bill, date, payment,
+          kind: 'bill', bill, date, payment, envelope: env,
           expected: Number(bill.amount) || 0,
-          amount: payment ? Number(payment.amount) || 0 : Number(bill.amount) || 0,
-          estimated: !payment && bill.amountType === 'variable',
-          status: C.status(date, payment)
+          // while a cycle is running, plan with whichever is bigger: allocation or spent so far
+          amount: payment ? Number(payment.amount) || 0 : live ? Math.max(env.allocated, env.spent) : Number(bill.amount) || 0,
+          estimated: !payment && (bill.amountType === 'variable' || !!live),
+          status: live && date <= U.today() ? 'tracking' : C.status(date, payment)
         });
       });
     });
@@ -43,7 +88,7 @@ window.Budget = window.Budget || {};
   };
 
   /** Bills overdue (not paid) — looks back 1 year. */
-  C.overdue = () => C.billOccurrences(U.addDays(U.today(), -365), U.addDays(U.today(), -1)).filter((o) => !o.payment);
+  C.overdue = () => C.billOccurrences(U.addDays(U.today(), -365), U.addDays(U.today(), -1)).filter((o) => o.status === 'overdue');
 
   C.incomeOccurrences = (from, to) => {
     const out = [];
@@ -75,7 +120,8 @@ window.Budget = window.Budget || {};
   C.summary = (from, to) => {
     const bills = C.billOccurrences(from, to);
     const income = C.incomeOccurrences(from, to);
-    const spend = C.transactionsIn(from, to, 'expense');
+    // spending linked to a tracked bill is already inside that bill's amount
+    const spend = C.transactionsIn(from, to, 'expense').filter((t) => !C.countedInBill(t));
     const extraIncome = C.transactionsIn(from, to, 'income');
 
     const incomeTotal = U.sum(income, (i) => i.amount) + U.sum(extraIncome, (t) => t.amount);
