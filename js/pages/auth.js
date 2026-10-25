@@ -27,6 +27,7 @@
               <div class="card">
                 ${B.ui.tabs([{ id: 'signin', label: 'Sign in' }, { id: 'signup', label: 'Create account' }], mode, 'mode')}
                 <h2>${isUp ? 'Create your account' : 'Welcome back'}</h2>
+                ${!local ? `<p class="muted small">One login for Budgetlog and Plate Log.</p>` : ''}
                 <form id="auth-form" novalidate>
                   <div class="form-error" role="alert" hidden></div>
                   ${isUp ? `<div class="field"><label class="field__label" for="a-name">Your name</label><input id="a-name" name="name" type="text" autocomplete="given-name"></div>` : ''}
@@ -39,7 +40,8 @@
                     </div>
                     <p class="field__help" id="pw-help">${isUp ? 'At least 8 characters.' : ''}</p>
                   </div>
-                  ${!isUp ? `<label class="check"><input type="checkbox" name="remember" checked> <span>Keep me signed in on this device</span></label>` : ''}
+                  ${!isUp && local ? `<label class="check"><input type="checkbox" name="remember" checked> <span>Keep me signed in on this device</span></label>` : ''}
+                  ${!isUp && !local ? `<p class="small" style="margin:0"><button type="button" class="btn btn--link" data-forgot>Forgot your password?</button></p>` : ''}
                   <button class="btn btn--primary btn--block" type="submit" style="margin-top:12px">${isUp ? 'Create account' : 'Sign in'}</button>
                 </form>
                 ${local ? `
@@ -83,8 +85,23 @@
         } catch (ex) {
           err.hidden = false;
           err.textContent = ex.message;
+          err.classList.toggle('form-error--info', !!ex.info);
           btn.disabled = false;
         }
+      };
+
+      const forgot = root.querySelector('[data-forgot]');
+      if (forgot) forgot.onclick = async () => {
+        const err = form.querySelector('.form-error');
+        try {
+          await B.auth.resetPassword(root.querySelector('#a-email').value);
+          err.textContent = 'If that email has an account, a reset link is on its way. Open it on this device to choose a new password.';
+          err.classList.add('form-error--info');
+        } catch (ex) {
+          err.textContent = ex.message;
+          err.classList.remove('form-error--info');
+        }
+        err.hidden = false;
       };
     }
   };

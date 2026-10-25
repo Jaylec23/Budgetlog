@@ -17,11 +17,13 @@ Budget.config = {
   appId: 'budgetlog',
   version: '0.1.0',
 
-  backend: 'local',          // 'local' | 'supabase'
+  backend: 'supabase',       // 'local' | 'supabase'
 
   // Fill these in when you switch to Supabase (Project Settings → API).
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  // Shared with Plate Log ("Jaylec23's Project"). The publishable key is
+  // meant to be public — row-level security protects everyone's data.
+  supabaseUrl: 'https://jzlepztfizgczvnyzcfs.supabase.co',
+  supabaseAnonKey: 'sb_publishable_WtiS1l4ULsi6Re2yCmtw6g_HeBi9vyV',
 
   // Prefix for everything stored in the browser.
   storagePrefix: 'budgetlog.'

@@ -46,11 +46,18 @@ Budget.pages = Budget.pages || {};
       B.store.on('settings', () => this.applyTheme());
       B.store.on('save', (state) => {
         const el = document.getElementById('save-state');
-        if (el) { el.dataset.state = state; el.textContent = { saving: 'Saving…', saved: 'Saved on this device', error: 'Couldn’t save' }[state]; }
+        if (el) { el.dataset.state = state; el.textContent = { saving: 'Saving…', saved: B.storage.name === 'local' ? 'Saved on this device' : 'Saved to your account', error: 'Couldn’t save' }[state]; }
         if (state === 'error') B.ui.toast('Your changes couldn’t be saved. Try exporting a backup from Settings.', { type: 'error' });
       });
-      if (!location.hash || location.hash === '#/' || location.hash.startsWith('#/auth')) location.hash = '#/dashboard';
+      if (!location.hash.startsWith('#/') || location.hash === '#/' || location.hash.startsWith('#/auth')) location.hash = '#/dashboard';
       this.route(false);
+      if (B.auth.recovering) {
+        B.ui.form({
+          title: 'Choose a new password', size: 'sm', submitLabel: 'Save password',
+          fields: [{ name: 'nw', label: 'New password', type: 'password', required: true, autocomplete: 'new-password', help: 'At least 8 characters. This changes your password for Plate Log too.' }],
+          onSubmit: async (v) => { await B.auth.changePassword(null, v.nw); B.ui.toast('Password updated'); }
+        });
+      }
     },
 
     showAuth() {
@@ -110,7 +117,7 @@ Budget.pages = Budget.pages || {};
                 <div class="grow"><div class="list__title">${esc(user.name)}</div><div class="muted small">${user.guest ? 'Guest on this device' : esc(user.email)}</div></div>
                 <button class="icon-btn" type="button" data-signout aria-label="Sign out" title="Sign out">⎋</button>
               </div>
-              <div class="save-state" id="save-state" data-state="saved" role="status">Saved on this device</div>
+              <div class="save-state" id="save-state" data-state="saved" role="status">${B.storage.name === 'local' ? 'Saved on this device' : 'Saved to your account'}</div>
             </div>
           </nav>
           <div class="scrim" data-close-nav hidden></div>

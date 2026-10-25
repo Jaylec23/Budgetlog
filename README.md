@@ -37,7 +37,11 @@ Data saves in the browser on that device (localStorage). Each account you create
 - **New home-screen widget:** add it to `WIDGETS` in `js/pages/dashboard.js` and its id to `DEFAULT_WIDGETS` in `js/data/store.js`.
 - **New default category:** edit the list in `defaultData()` in `js/data/store.js` (affects new accounts only).
 
-## Switching to Supabase
+## Supabase (live)
+
+Budgetlog now uses the same Supabase project as Plate Log ("Jaylec23's Project"), so one login works for both. Budgetlog's data is in the `app_data` table (`app = 'budgetlog'`); Plate Log's `docs` table is untouched. To run the site offline with local-only saving, set `backend: 'local'` in `js/config.js`.
+
+### Switching a fresh copy to Supabase
 
 The app only talks to storage and login through two small objects, so the switch is mostly configuration:
 

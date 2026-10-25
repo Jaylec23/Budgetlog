@@ -137,49 +137,89 @@ window.Budget = window.Budget || {};
     }
   };
 
-  /* ---------- Supabase auth (ready to switch on) ---------- */
+  /* ---------- Supabase auth (shared with Plate Log) ----------
+     The login lives in the shared Supabase project, so the same email
+     and password work in every app that uses it. */
+  const friendly = (e) => {
+    const m = (e && e.message) || String(e);
+    if (/invalid login credentials/i.test(m)) return new Error('That email and password don’t match an account.');
+    if (/email not confirmed/i.test(m)) return new Error('Please confirm your email first — check your inbox for the link we sent.');
+    if (/already registered|already been registered/i.test(m)) return new Error('An account with that email already exists. Try signing in — it’s the same login as Plate Log.');
+    if (/rate limit/i.test(m)) return new Error('Too many attempts. Please wait a minute and try again.');
+    return new Error(m);
+  };
+
   const SupabaseAuth = {
     name: 'supabase',
     _user: null,
+    recovering: false,
     sb() { return B.supabaseClient; },
     map(u) {
       return u && { id: u.id, email: u.email, name: (u.user_metadata && u.user_metadata.name) || u.email.split('@')[0], guest: false };
     },
     async init() {
-      B.supabaseClient = window.supabase.createClient(B.config.supabaseUrl, B.config.supabaseAnonKey);
+      if (!window.supabase) throw new Error('Couldn’t load the sign-in service. Check your internet connection and refresh.');
+      // A password-reset email link returns here with type=recovery in the address.
+      this.recovering = /type=recovery/.test(location.hash) || /type=recovery/.test(location.search);
+      B.supabaseClient = window.supabase.createClient(B.config.supabaseUrl, B.config.supabaseAnonKey, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+      });
       const { data } = await this.sb().auth.getSession();
       this._user = this.map(data.session && data.session.user);
+      if (location.hash.includes('access_token') || location.hash.includes('error=')) history.replaceState(null, '', location.pathname);
       return this._user;
     },
     current() { return this._user; },
     async signUp({ name, email, password }) {
-      const { data, error } = await this.sb().auth.signUp({ email, password, options: { data: { name } } });
-      if (error) throw error;
+      if (!password || password.length < 8) throw new Error('Password needs at least 8 characters.');
+      const { data, error } = await this.sb().auth.signUp({
+        email: String(email || '').trim(), password,
+        options: { data: { name: (name || '').trim() }, emailRedirectTo: location.origin + location.pathname }
+      });
+      if (error) throw friendly(error);
+      if (!data.session) {
+        const e = new Error('Almost there! We’ve sent you an email — tap the link in it to confirm your account, then sign in here.');
+        e.info = true;
+        throw e;
+      }
       this._user = this.map(data.user);
       return this._user;
     },
     async signIn({ email, password }) {
-      const { data, error } = await this.sb().auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      const { data, error } = await this.sb().auth.signInWithPassword({ email: String(email || '').trim(), password });
+      if (error) throw friendly(error);
       this._user = this.map(data.user);
       return this._user;
+    },
+    async resetPassword(email) {
+      if (!email || !email.includes('@')) throw new Error('Enter your email address first.');
+      const { error } = await this.sb().auth.resetPasswordForEmail(email.trim(), { redirectTo: location.origin + location.pathname });
+      if (error) throw friendly(error);
     },
     async signInGuest() { throw new Error('Guest mode is only available in local mode.'); },
     async signOut() { await this.sb().auth.signOut(); this._user = null; },
     async updateProfile({ name }) {
       const { data, error } = await this.sb().auth.updateUser({ data: { name } });
-      if (error) throw error;
+      if (error) throw friendly(error);
       this._user = this.map(data.user);
       return this._user;
     },
-    async changePassword(_old, newPw) {
+    async changePassword(oldPw, newPw) {
+      if (!newPw || newPw.length < 8) throw new Error('New password needs at least 8 characters.');
+      if (oldPw != null) {
+        // Check the current password before changing it.
+        const { error: e1 } = await this.sb().auth.signInWithPassword({ email: this._user.email, password: oldPw });
+        if (e1) throw new Error('Current password is incorrect.');
+      }
       const { error } = await this.sb().auth.updateUser({ password: newPw });
-      if (error) throw error;
+      if (error) throw friendly(error);
+      this.recovering = false;
     },
-    async deleteAccount() {
-      // The login is shared with other apps (e.g. Plate Log), so this only
-      // removes Budgetlog's data and signs out. Deleting the login itself
-      // (and every app's data) needs a server function with the service key.
+    async deleteAccount(password) {
+      // The login is shared with Plate Log, so this only removes Budgetlog's
+      // data and signs out. The login itself stays for the other apps.
+      const { error } = await this.sb().auth.signInWithPassword({ email: this._user.email, password });
+      if (error) throw new Error('Password is incorrect.');
       await B.storage.remove(this._user.id);
       await this.signOut();
     }

@@ -107,7 +107,7 @@
             <div class="row" style="margin-top:10px">
               ${!user.guest ? '<button class="btn btn--ghost" data-act="pw">Change password</button>' : ''}
               <button class="btn btn--ghost" data-act="signout">Sign out</button>
-              <button class="btn btn--danger-ghost" data-act="delete">Delete ${user.guest ? 'guest profile' : 'account'}…</button>
+              <button class="btn btn--danger-ghost" data-act="delete">Delete ${user.guest ? 'guest profile' : B.auth.name === 'supabase' ? 'Budgetlog data' : 'account'}…</button>
             </div>
           </section>
         </div>
@@ -189,8 +189,10 @@
             break;
           case 'delete':
             ui.form({
-              title: user.guest ? 'Delete guest profile' : 'Delete your account', size: 'sm', submitLabel: 'Delete forever',
-              intro: 'This permanently removes your profile and all its budget data from this device. It can’t be undone.',
+              title: user.guest ? 'Delete guest profile' : B.auth.name === 'supabase' ? 'Delete your Budgetlog data' : 'Delete your account', size: 'sm', submitLabel: 'Delete forever',
+              intro: B.auth.name === 'supabase'
+                ? 'This permanently deletes all your Budgetlog data and signs you out. Your login stays, so you can still use Plate Log.'
+                : 'This permanently removes your profile and all its budget data from this device. It can’t be undone.',
               fields: user.guest ? [{ name: 'confirm', label: 'Type DELETE to confirm', required: true, validate: (x) => (x !== 'DELETE' ? 'Type DELETE in capitals.' : '') }]
                 : [{ name: 'pw', label: 'Your password', type: 'password', required: true, autocomplete: 'current-password' }],
               onSubmit: async (v) => {

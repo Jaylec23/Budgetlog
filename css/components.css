@@ -134,6 +134,7 @@ fieldset.field { margin-inline: 0; }
 .field__err { color: var(--danger); font-size: .85rem; font-weight: 600; margin: 4px 0 0; }
 .field__err:empty { display: none; }
 .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0 12px; }
+.form-error--info { background: var(--info-soft) !important; color: var(--info) !important; }
 .form-error { background: var(--danger-soft); color: var(--danger); padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 14px; font-weight: 600; }
 
 input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="date"], input[type="search"], select, textarea {
