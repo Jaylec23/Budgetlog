@@ -8,7 +8,14 @@
   const U = B.utils, C = B.calc, ui = B.ui, S = B.store, R = B.recur;
   const esc = U.esc;
 
-  const PERIOD_TABS = [{ id: 'week', label: 'This week' }, { id: 'fortnight', label: 'This fortnight' }, { id: 'month', label: 'This month' }];
+  // "This fortnight" (or week / 4 weeks / month) follows the pay cycle chosen on the Pay plan page
+  const periodTabs = () => {
+    const cs = C.cycleSettings();
+    const tabs = [{ id: 'cycle', label: `This ${cs.info.name}` }];
+    if (cs.length !== 'week') tabs.push({ id: 'week', label: 'This week' });
+    if (!(cs.length === 'month' && U.parse(cs.start).getDate() === 1)) tabs.push({ id: 'month', label: 'This month' });
+    return tabs;
+  };
 
   /* ---------- reusable row for a bill occurrence ---------- */
   function occRow(o, { showDate = true } = {}) {
@@ -80,21 +87,23 @@
       </section>`;
     } },
 
-    setAside: { label: 'Set aside each pay', render: () => {
-      const pay = S.data.settings.payFrequency;
-      const per = R.PERIODS.find((x) => x.id === pay);
-      const sa = C.setAside(pay);
-      if (!sa.rows.length) return '';
-      const accounts = Object.entries(sa.byAccount).sort((a, b) => b[1] - a[1]);
+    setAside: { label: 'Pay plan for this cycle', render: () => {
+      const cs = C.cycleSettings();
+      const cp = C.cyclePeriod();
+      const plan = C.cyclePlan(cp);
+      const accts = plan.accounts.filter((a) => a.total > 0);
+      if (!accts.length && !plan.incomeTotal) return '';
+      const done = accts.filter((a) => a.moved).length;
       return `<section class="card" aria-labelledby="w-sa">
-        <div class="card__head"><h2 id="w-sa">Set aside ${esc(per.label)}</h2><a href="#/settings" class="small">Change</a></div>
-        <p class="muted small">To cover every bill without surprises, move this much ${esc(per.label)}:</p>
+        <div class="card__head"><h2 id="w-sa">This ${esc(cs.info.name)}’s plan</h2><a href="#/plan" class="small">Open pay plan</a></div>
+        <p class="muted small">${esc(cp.label)}${!cs.set ? ' · <a href="#/plan">set your start date</a>' : ''}</p>
         <dl class="kv">
-          ${accounts.map(([id, v]) => `<dt>${ui.dot(C.account(id).color)} Into ${esc(C.account(id).name)}</dt><dd>${U.money(v)}</dd>`).join('')}
-          <dt class="total"><strong>Total for bills</strong></dt><dd class="total">${U.money(sa.total)}</dd>
-          ${sa.incomePer ? `<dt>Your income ${esc(per.label)}</dt><dd>${U.money(sa.incomePer)}</dd>
-            <dt>Free after bills</dt><dd class="${sa.incomePer - sa.total >= 0 ? 'pos' : 'neg'}">${U.money(sa.incomePer - sa.total)}</dd>` : ''}
+          ${accts.map((a) => `<dt>${ui.dot(C.account(a.accountId).color)} ${a.accountId === plan.payAccountId ? 'Keep in' : 'Into'} ${esc(C.account(a.accountId).name)}${a.moved ? ' <span class="badge badge--paid">Done</span>' : ''}</dt><dd>${U.money(a.total)}</dd>`).join('')}
+          <dt class="total"><strong>To set aside</strong></dt><dd class="total">${U.money(plan.needed)}</dd>
+          ${plan.incomeTotal ? `<dt>Income this ${esc(cs.info.name)}</dt><dd>${plan.estimated ? '≈ ' : ''}${U.money(plan.incomeTotal)}</dd>
+            <dt>Left to spend</dt><dd class="${plan.leftover >= 0 ? 'pos' : 'neg'}">${U.money(plan.leftover)}</dd>` : ''}
         </dl>
+        ${accts.length ? `<p class="small muted" style="margin:10px 0 0">${done} of ${accts.length} account${accts.length === 1 ? '' : 's'} sorted</p>` : ''}
       </section>`;
     } },
 
@@ -159,7 +168,7 @@
     title: 'Home', short: 'Home', icon: '🏠',
     render(main) {
       const s = S.data.settings;
-      const p = C.period(s.dashboardPeriod || 'month');
+      const p = C.period(s.dashboardPeriod === 'fortnight' ? 'cycle' : (s.dashboardPeriod || 'month'));
       const sum = C.summary(p.from, p.to);
       const hour = new Date().getHours();
       const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -179,7 +188,7 @@
         </div>
         <div class="stack">
           ${onboarding()}
-          ${ui.tabs(PERIOD_TABS, p.type, 'period')}
+          ${ui.tabs(periodTabs(), p.type, 'period')}
           <p class="muted small" style="margin-top:-8px">${esc(p.label)}</p>
           ${first || ''}
           <div class="grid grid--2">${rest.join('')}</div>

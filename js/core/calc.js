@@ -161,14 +161,11 @@ window.Budget = window.Budget || {};
       const to = U.addDays(from, 6);
       return { type, from, to, label: `${U.fmtDate(from, 'short')} – ${U.fmtDate(to, 'full')}` };
     }
+    if (type === 'cycle') return C.cyclePeriod(date);
     if (type === 'fortnight') {
-      // fortnights line up with the first income's pay cycle when there is one
-      const inc = S().list('income').find((i) => i.frequency === 'fortnightly' && !i.paused);
-      let from;
-      if (inc) {
-        const diff = U.daysBetween(inc.startDate, date);
-        from = U.addDays(inc.startDate, Math.floor(diff / 14) * 14);
-      } else from = U.startOfWeek(date, ws);
+      // fortnights line up with the pay cycle start you chose in Settings
+      const anchor = C.cycleSettings().start;
+      const from = U.addDays(anchor, Math.floor(U.daysBetween(anchor, date) / 14) * 14);
       const to = U.addDays(from, 13);
       return { type, from, to, label: `${U.fmtDate(from, 'short')} – ${U.fmtDate(to, 'full')}` };
     }
@@ -179,10 +176,133 @@ window.Budget = window.Budget || {};
   };
 
   C.shiftPeriod = (p, dir) => {
+    if (p.type === 'cycle') {
+      let cur = p;
+      for (let i = 0; i < Math.abs(dir); i++) cur = C.cyclePeriod(dir > 0 ? U.addDays(cur.to, 1) : U.addDays(cur.from, -1));
+      return cur;
+    }
     const step = { week: 7, fortnight: 14 }[p.type];
     if (step) return C.period(p.type, U.addDays(p.from, dir * step));
     if (p.type === 'year') return C.period('year', `${Number(p.from.slice(0, 4)) + dir}-06-01`);
     return C.period('month', U.addMonths(p.from, dir));
+  };
+
+  /* ---------- pay cycle (the budgeting period people choose) ----------
+     settings.cycle = { length: 'week'|'fortnight'|'fourweek'|'month',
+                        start: 'YYYY-MM-DD' (any day a cycle started),
+                        method: 'due'|'even', goals: true|false }
+     Every cycle is counted on from `start`, so it's remembered forever. */
+  C.CYCLE_LENGTHS = [
+    { id: 'week', label: 'Weekly', name: 'week', days: 7, period: 'week' },
+    { id: 'fortnight', label: 'Fortnightly', name: 'fortnight', days: 14, period: 'fortnight' },
+    { id: 'fourweek', label: 'Every 4 weeks', name: '4-week cycle', days: 28, period: 'fourweek' },
+    { id: 'month', label: 'Monthly (from a day you choose)', name: 'month', days: 0, period: 'month' }
+  ];
+  C.cycleLength = (id) => C.CYCLE_LENGTHS.find((x) => x.id === id) || C.CYCLE_LENGTHS[1];
+
+  /** A sensible first guess: the first matching pay day, else the start of this week. */
+  C.suggestCycleStart = (length = 'fortnight') => {
+    const freq = { week: 'weekly', fortnight: 'fortnightly', fourweek: 'fourweekly', month: 'monthly' }[length];
+    const inc = S().list('income').find((i) => i.frequency === freq && !i.paused);
+    if (inc) return R.previous(inc, U.addDays(U.today(), 1)) || inc.startDate;
+    return U.startOfWeek(U.today(), Number(S().data.settings.weekStart));
+  };
+
+  C.cycleSettings = () => {
+    const c = S().data.settings.cycle || {};
+    const length = C.cycleLength(c.length).id;
+    return {
+      length, set: U.isISO(c.start),
+      start: U.isISO(c.start) ? c.start : C.suggestCycleStart(length),
+      method: c.method === 'even' ? 'even' : 'due',
+      goals: c.goals !== false,
+      info: C.cycleLength(length)
+    };
+  };
+
+  /** The pay cycle containing `date`. */
+  C.cyclePeriod = (date = U.today()) => {
+    const cs = C.cycleSettings();
+    let from, to;
+    if (cs.info.days) {
+      const n = cs.info.days;
+      from = U.addDays(cs.start, Math.floor(U.daysBetween(cs.start, date) / n) * n);
+      to = U.addDays(from, n - 1);
+    } else {
+      // monthly from the start's day-of-month (31st → last day in short months)
+      const day = U.parse(cs.start).getDate();
+      const d = U.parse(date);
+      from = U.monthDate(d.getFullYear(), d.getMonth(), day);
+      if (from > date) from = U.monthDate(d.getFullYear(), d.getMonth() - 1, day);
+      const f = U.parse(from);
+      to = U.addDays(U.monthDate(f.getFullYear(), f.getMonth() + 1, day), -1);
+    }
+    return { type: 'cycle', from, to, name: cs.info.name, label: `${U.fmtDate(from, 'short')} – ${U.fmtDate(to, 'full')}` };
+  };
+
+  /** Next `count` cycles starting with the one containing `date`. */
+  C.cycles = (count, date = U.today()) => {
+    const out = [C.cyclePeriod(date)];
+    while (out.length < count) out.push(C.shiftPeriod(out[out.length - 1], 1));
+    return out;
+  };
+
+  /**
+   * How much each account needs for one pay cycle.
+   * method 'due'  → the bills actually due in that cycle
+   * method 'even' → an even share of every bill (e.g. a yearly bill ÷ 26)
+   * Goals with a target date get an even share of what's left to save.
+   */
+  C.cyclePlan = (p, opts = {}) => {
+    const cs = C.cycleSettings();
+    const method = opts.method || cs.method;
+    const accounts = {};
+    const acc = (id) => (accounts[id || ''] = accounts[id || ''] || { accountId: id || '', items: [], total: 0, incomeIn: 0 });
+    const add = (id, item) => { const a = acc(id); a.items.push(item); a.total += item.amount; };
+
+    if (method === 'even') {
+      // includes bills whose first due date is still ahead, so you save for them early
+      S().list('bills').filter((b) => !b.paused && (!b.endDate || b.endDate >= p.from)).forEach((b) => {
+        if (b.frequency === 'once') {
+          if (b.startDate >= p.from && b.startDate <= p.to) add(b.accountId, { kind: 'bill', name: b.name, bill: b, amount: Number(b.amount) || 0, date: b.startDate });
+          return;
+        }
+        const amt = R.amountPer(b, cs.info.period);
+        if (amt > 0) add(b.accountId, { kind: 'bill', name: b.name, bill: b, amount: amt, even: true });
+      });
+    } else {
+      C.billOccurrences(p.from, p.to).forEach((o) => {
+        const planned = o.bill.trackSpending ? o.expected : o.payment && !o.payment.auto ? o.amount : o.expected;
+        add(o.bill.accountId, { kind: 'bill', name: o.bill.name, bill: o.bill, amount: planned, date: o.date, paid: !!(o.payment && !o.payment.tracked) });
+      });
+    }
+
+    if (cs.goals && p.to >= U.today()) {
+      S().list('goals').forEach((g) => {
+        const plan = C.goalPlan(g);
+        if (!g.targetDate || plan.remaining <= 0 || g.targetDate < p.from) return;
+        const days = cs.info.days || 30.44;
+        const cyclesLeft = Math.max(1, Math.ceil((U.daysBetween(U.max(p.from, U.today()), g.targetDate) + 1) / days));
+        add(g.accountId, { kind: 'goal', name: g.name, goal: g, amount: plan.remaining / cyclesLeft });
+      });
+    }
+
+    const income = C.incomeOccurrences(p.from, p.to);
+    income.forEach((o) => { acc(o.income.accountId).incomeIn += o.amount; });
+
+    const list = Object.values(accounts)
+      .map((a) => Object.assign(a, { total: U.round2(a.total), moved: !!(S().data.settings.cycleMoved || {})[`${p.from}|${a.accountId}`] }))
+      .sort((a, b) => b.incomeIn - a.incomeIn || C.account(a.accountId).name.localeCompare(C.account(b.accountId).name));
+    const incomeTotal = U.sum(income, (o) => o.amount);
+    const needed = U.sum(list, (a) => a.total);
+    // the account most pay lands in — money for it can simply stay there
+    const payAccount = list.filter((a) => a.incomeIn > 0).sort((a, b) => b.incomeIn - a.incomeIn)[0];
+    return {
+      period: p, method, accounts: list, income, incomeTotal, needed,
+      leftover: incomeTotal - needed,
+      estimated: income.some((o) => o.estimated),
+      payAccountId: payAccount ? payAccount.accountId : null
+    };
   };
 
   /* ---------- set-aside planner ---------- */

@@ -38,6 +38,7 @@ window.Budget = window.Budget || {};
   const PERIODS = [
     { id: 'week',      label: 'per week',      perYear: 365.25 / 7 },
     { id: 'fortnight', label: 'per fortnight', perYear: 365.25 / 14 },
+    { id: 'fourweek',  label: 'per 4 weeks',   perYear: 365.25 / 28 },
     { id: 'month',     label: 'per month',     perYear: 12 },
     { id: 'year',      label: 'per year',      perYear: 1 }
   ];

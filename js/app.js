@@ -13,7 +13,7 @@ Budget.pages = Budget.pages || {};
 
   // Order and grouping of the navigation menu.
   const NAV = [
-    { section: 'Your money', items: ['dashboard', 'bills', 'income', 'spending', 'calendar', 'insights', 'goals'] },
+    { section: 'Your money', items: ['dashboard', 'plan', 'bills', 'income', 'spending', 'calendar', 'insights', 'goals'] },
     { section: 'Set up', items: ['organise', 'settings', 'help'] }
   ];
   const BOTTOM = ['dashboard', 'bills', '+', 'insights', 'menu'];

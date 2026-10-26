@@ -7,10 +7,14 @@
   const U = B.utils, C = B.calc, ui = B.ui, S = B.store;
   const esc = U.esc;
 
-  const TABS = [
-    { id: 'week', label: 'Week' }, { id: 'fortnight', label: 'Fortnight' },
-    { id: 'month', label: 'Month' }, { id: 'year', label: 'Year' }, { id: 'custom', label: 'Custom' }
-  ];
+  const TABS = () => {
+    const cs = C.cycleSettings();
+    const cycleLabel = { week: 'Pay week', fortnight: 'Fortnight', fourweek: '4 weeks', month: 'Pay month' }[cs.length];
+    return [
+      { id: 'cycle', label: cycleLabel }, ...(cs.length === 'week' ? [] : [{ id: 'week', label: 'Week' }]),
+      { id: 'month', label: 'Month' }, { id: 'year', label: 'Year' }, { id: 'custom', label: 'Custom' }
+    ];
+  };
   const SECTION_LABELS = {
     summary: 'Summary numbers', trend: 'Trend chart', categories: 'Spending by category',
     accounts: 'Spending by account', metrics: 'Key measures', list: 'Everything in this period'
@@ -31,7 +35,7 @@
     } else if (p.type === 'custom') {
       return '';
     } else {
-      const n = { week: 8, fortnight: 6, month: 6 }[p.type];
+      const n = { week: 8, fortnight: 6, cycle: 6, month: 6 }[p.type];
       let cur = p;
       for (let i = 0; i < n; i++) { periods.unshift(cur); cur = C.shiftPeriod(cur, -1); }
     }
@@ -43,7 +47,7 @@
         current: x.from === p.from || (p.type === 'year' && x.from.slice(0, 7) === U.today().slice(0, 7))
       };
     });
-    const title = p.type === 'year' ? `Each month of ${p.label}` : `Last ${periods.length} ${p.type === 'month' ? 'months' : p.type + 's'}`;
+    const title = p.type === 'year' ? `Each month of ${p.label}` : `Last ${periods.length} ${p.type === 'month' ? 'months' : (p.name || p.type) + 's'}`;
     return `<section class="card" aria-labelledby="r-trend">
       <div class="card__head"><h2 id="r-trend">${esc(title)}</h2></div>
       ${ui.columns(groups, SERIES, { caption: title })}
@@ -94,7 +98,7 @@
     title: 'Insights', icon: '📊',
     render(main) {
       const s = S.data.settings;
-      if (!state.type) state.type = 'month';
+      if (!state.type || state.type === 'fortnight') state.type = 'month';
       if (!state.period || state.period.type !== state.type) {
         if (state.type === 'custom') {
           state.from = state.from || U.startOfMonth(U.addMonths(U.today(), -2));
@@ -128,7 +132,7 @@
           <div><h1>Insights</h1><p>How you’re tracking over any stretch of time.</p></div>
           <div class="page-head__actions"><button class="btn btn--ghost" data-act="customise">⚙ Customise</button></div>
         </div>
-        ${ui.tabs(TABS, state.type, 'rtype')}
+        ${ui.tabs(TABS(), state.type, 'rtype')}
         ${p.type === 'custom' ? `
           <div class="toolbar">
             <label for="r-from">From</label><input id="r-from" type="date" value="${p.from}" style="width:auto">

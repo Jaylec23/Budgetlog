@@ -61,9 +61,19 @@
 
           <section class="card" aria-labelledby="st-budget" id="budget">
             <div class="card__head"><h2 id="st-budget">Budget preferences</h2></div>
-            <div class="field"><label class="field__label" for="set-payFrequency">Show “set aside” amounts</label>
-              ${sel('payFrequency', R.PERIODS.map((p) => [p.id, p.label.replace('per ', 'Per ')]), s.payFrequency)}
-              <p class="field__help">Usually matches how often you’re paid.</p></div>
+            ${(() => { const cs = B.calc.cycleSettings(); return `
+            <div class="form-row">
+              <div class="field"><label class="field__label" for="set-cycleLength">Pay cycle</label>
+                <select id="set-cycleLength" data-cycle="length">${B.calc.CYCLE_LENGTHS.map((x) => `<option value="${x.id}" ${x.id === cs.length ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>
+              <div class="field"><label class="field__label" for="set-cycleStart">A cycle started on</label>
+                <input id="set-cycleStart" type="date" data-cycle="start" value="${cs.start}"></div>
+            </div>
+            <p class="field__help" style="margin-top:-6px">${cs.set ? `Current cycle: ${esc(B.calc.cyclePeriod().label)}. ` : 'Not set yet — this is our best guess. '}Used for “set aside” amounts, the Pay plan and the Home & Insights tabs.</p>
+            <div class="field"><label class="field__label" for="set-cycleMethod">Pay plan uses</label>
+              <select id="set-cycleMethod" data-cycle="method">
+                <option value="due" ${cs.method === 'due' ? 'selected' : ''}>Bills due in each cycle</option>
+                <option value="even" ${cs.method === 'even' ? 'selected' : ''}>Even amounts every cycle</option>
+              </select></div>`; })()}
             <div class="form-row">
               <div class="field"><label class="field__label" for="set-dueSoonDays">“Due soon” means within</label>${sel('dueSoonDays', [1, 2, 3, 5, 7, 14].map((n) => [n, `${n} day${n > 1 ? 's' : ''}`]), s.dueSoonDays)}</div>
               <div class="field"><label class="field__label" for="set-upcomingDays">Home shows bills for the next</label>${sel('upcomingDays', [7, 14, 21, 30, 60].map((n) => [n, `${n} days`]), s.upcomingDays)}</div>
@@ -116,6 +126,14 @@
       /* ----- instant settings ----- */
       main.onchange = (e) => {
         const el = e.target;
+        if (el.dataset.cycle) {
+          if (el.dataset.cycle === 'start' && !U.isISO(el.value)) return;
+          const patch = { [el.dataset.cycle]: el.value };
+          if (el.dataset.cycle === 'length') { patch.start = B.calc.suggestCycleStart(el.value); }
+          else if (!(S.data.settings.cycle || {}).start) patch.start = B.calc.cycleSettings().start;
+          B.pages._saveCycle(patch);
+          return ui.toast('Pay cycle saved', { duration: 1200 });
+        }
         if (el.dataset.vis) {
           const [list, id] = el.dataset.vis.split('|');
           const arr = S.data.settings[list].map((w) => (w.id === id ? { ...w, visible: el.checked } : w));

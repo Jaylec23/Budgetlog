@@ -18,6 +18,8 @@
       'Add groceries as a bill with the amount you allow each week (or fortnight, or month), and tick <em>“Track it with my spending”</em>. Then, whenever you add spending, choose <em>Groceries</em> under <em>“Counts towards a bill”</em>. The Spending page shows how much is left for the current week, grouped by account so you can compare it with what you moved into each account. Linked spending is counted once, inside the bill, not again as extra spending.'],
     ['What does “Paid automatically” do?',
       'For direct debits, tick it and the bill counts as paid on its due date without you doing anything. You can still edit the amount if it was different.'],
+    ['How does the Pay plan work?',
+      'Choose how often you budget (weekly, fortnightly, every 4 weeks or monthly) and any day a cycle started, usually a pay day. It’s remembered, and every cycle after that follows on. For each cycle, the Pay plan lists how much to put into each account, either for the bills actually due that cycle or as even amounts every time, plus a share of any savings goals with a target date. Tick each account off once you’ve moved the money. You can change the cycle any time in Settings or on the Pay plan page.'],
     ['What is “Set aside each pay”?',
       'It turns every bill into an amount per week, fortnight or month — so a $900 yearly rego becomes about $34.60 a fortnight. Move that much into each account every pay and the money will be there when bills arrive.'],
     ['Why use accounts?',
